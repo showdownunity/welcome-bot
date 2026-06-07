@@ -256,6 +256,224 @@ client.on(Events.InteractionCreate, async (interaction) => {
   });
 });
 
+
+// ─────────────────────────────────────────
+// SYNC PERMISSIONS
+// ─────────────────────────────────────────
+async function syncPermissions(guild) {
+  const roles = {
+    ceo:              guild.roles.cache.find(r => r.name === 'CEO'),
+    directeur:        guild.roles.cache.find(r => r.name === 'Directeur'),
+    responsableStaff: guild.roles.cache.find(r => r.name === 'Responsable Staff'),
+    communityManager: guild.roles.cache.find(r => r.name === 'Community Manager'),
+    arbitreChef:      guild.roles.cache.find(r => r.name === 'Arbitre Chef'),
+    arbitre:          guild.roles.cache.find(r => r.name === 'Arbitre'),
+    moderateur:       guild.roles.cache.find(r => r.name === 'Modérateur'),
+    moderateurJunior: guild.roles.cache.find(r => r.name === 'Modérateur Junior'),
+    ligue1:           guild.roles.cache.find(r => r.name === '— Ligue 1'),
+    ligue2:           guild.roles.cache.find(r => r.name === '— Ligue 2'),
+    ligue3:           guild.roles.cache.find(r => r.name === '— Ligue 3'),
+    joueurVerif:      guild.roles.cache.find(r => r.name === 'Joueur Vérifié'),
+    champion:         guild.roles.cache.find(r => r.name === 'Champion'),
+    mvp:              guild.roles.cache.find(r => r.name === 'MVP'),
+    partenaire:       guild.roles.cache.find(r => r.name === 'Partenaire'),
+    streamer:         guild.roles.cache.find(r => r.name === 'Streamer Officiel'),
+    visiteur:         guild.roles.cache.find(r => r.name === 'Visiteur'),
+    blacklist:        guild.roles.cache.find(r => r.name === 'Blacklist'),
+    lowPriority:      guild.roles.cache.find(r => r.name === 'Low Priority'),
+  };
+
+  const everyone = guild.roles.everyone;
+
+  // Rôles staff complets
+  const staffRoles    = [roles.ceo, roles.directeur, roles.responsableStaff, roles.communityManager, roles.arbitreChef, roles.arbitre, roles.moderateur, roles.moderateurJunior].filter(Boolean);
+  // Rôles membres vérifiés
+  const memberRoles   = [roles.joueurVerif, roles.ligue1, roles.ligue2, roles.ligue3, roles.champion, roles.mvp, roles.partenaire, roles.streamer].filter(Boolean);
+
+  const staffPerms    = staffRoles.map(r => ({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ReadMessageHistory] }));
+  const memberPerms   = memberRoles.map(r => ({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }));
+  const readOnlyPerms = memberRoles.map(r => ({ id: r.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory], deny: [PermissionFlagsBits.SendMessages] }));
+
+  // Blacklist — aucun accès nulle part sauf règles
+  const blacklistDeny = roles.blacklist ? [{ id: roles.blacklist.id, deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : [];
+
+  let count = 0;
+  const channels = Array.from(guild.channels.cache.values());
+
+  for (const ch of channels) {
+    try {
+      const name = ch.name.toLowerCase();
+      const type = ch.type;
+
+      // Catégories — on skip
+      if (type === 4) continue;
+
+      // ── ACCUEIL ──────────────────────────────
+      if (name.includes('bienvenue')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+      else if (name.includes('règles')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+          ...staffPerms,
+        ]);
+      }
+      else if (name.includes('rôles') || name.includes('roles')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] },
+          ...staffPerms,
+        ]);
+      }
+      else if (name.includes('annonces')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...readOnlyPerms,
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── LIGUE ────────────────────────────────
+      else if (name.includes('comment-participer') || name.includes('site-officiel') || name.includes('classement') || name.includes('calendrier') || name.includes('résultats') || name.includes('palmares') || name.includes('palmarès')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...readOnlyPerms,
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── APEX ESPORT ──────────────────────────
+      else if (name.includes('news-apex') || name.includes('news-algs') || name.includes('meta-et-tips')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...readOnlyPerms,
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── STREAM ───────────────────────────────
+      else if (name.includes('twitch') || name.includes('discord-du-caster') || name.includes('planning-des-lives') || name.includes('vod')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...readOnlyPerms,
+          ...staffPerms,
+          ...(roles.streamer ? [{ id: roles.streamer.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── COMMUNAUTÉ ───────────────────────────
+      else if (name.includes('présentation') || name.includes('général')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+          ...staffPerms,
+          ...(roles.blacklist ? [{ id: roles.blacklist.id, deny: [PermissionFlagsBits.SendMessages, PermissionFlagsBits.ViewChannel] }] : []),
+        ]);
+      }
+      else if (name.includes('recherche-équipiers') || name.includes('sondages') || name.includes('clips') || name.includes('giveaways')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...memberPerms,
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── SUPPORT ──────────────────────────────
+      else if (name.includes('ouvrir-un-ticket')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...memberPerms.map(p => ({ ...p, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] })),
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+      else if (name.includes('faq') || name.includes('suggestions') || name.includes('report')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...memberPerms,
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── PARTENAIRES ──────────────────────────
+      else if (name.includes('nos-partenaires') || name.includes('annonces-partenaires')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...readOnlyPerms,
+          ...staffPerms,
+          ...(roles.partenaire ? [{ id: roles.partenaire.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }] : []),
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── LIGUES PRIVÉES ───────────────────────
+      else if (name.includes('-l1') || name.includes('ligue1') || name.includes('ligue 1')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...(roles.ligue1 ? [{ id: roles.ligue1.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : []),
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+      else if (name.includes('-l2') || name.includes('ligue2') || name.includes('ligue 2')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...(roles.ligue2 ? [{ id: roles.ligue2.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : []),
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+      else if (name.includes('-l3') || name.includes('ligue3') || name.includes('ligue 3')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...(roles.ligue3 ? [{ id: roles.ligue3.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }] : []),
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+
+      // ── RECRUTEMENT STAFF ────────────────────
+      else if (name.includes('postuler-staff')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...memberPerms.map(p => ({ ...p, allow: [PermissionFlagsBits.ViewChannel], deny: [PermissionFlagsBits.SendMessages] })),
+          ...staffPerms,
+          ...blacklistDeny,
+        ]);
+      }
+      else if (name.includes('candidatures')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...staffPerms,
+        ]);
+      }
+
+      // ── STAFF PRIVÉ ──────────────────────────
+      else if (name.includes('staff') || name.includes('logs-') || name.includes('tickets-archivés') || name.includes('modération')) {
+        await ch.permissionOverwrites.set([
+          { id: everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+          ...staffPerms,
+        ]);
+      }
+
+      count++;
+      await sleep(300);
+    } catch (e) {
+      console.log(`⚠️ Erreur channel ${ch.name}: ${e.message}`);
+    }
+  }
+
+  console.log(`✅ ${count} channels synchronisés.`);
+}
+
 // ─────────────────────────────────────────
 // COMMANDES
 // ─────────────────────────────────────────
@@ -279,12 +497,25 @@ client.on(Events.MessageCreate, async (message) => {
     return;
   }
 
+  if (cmd === '!sync-permissions') {
+    await message.reply('⚙️ Synchronisation des permissions... (1-2 minutes)');
+    try {
+      await syncPermissions(message.guild);
+      await message.channel.send('✅ Permissions synchronisées sur tous les channels !');
+    } catch (e) {
+      console.error('Erreur sync:', e);
+      await message.channel.send('❌ Erreur. Voir les logs Railway.');
+    }
+    return;
+  }
+
   if (cmd === '!welcome-aide') {
     await message.channel.send({ embeds: [new EmbedBuilder()
       .setTitle('Welcome Bot — Commandes')
       .setDescription(
         '`!setup-welcome` — Configure le système d\'accueil *(admin)*\n' +
-        '`!refresh-rules` — Rafraîchit le message des règles *(admin)*\n\n' +
+        '`!refresh-rules` — Rafraîchit le message des règles *(admin)*\n' +
+        '`!sync-permissions` — Synchronise les permissions de tous les channels *(admin)*\n\n' +
         '**Automatique :**\n' +
         '› Rôle **Visiteur** attribué à chaque nouveau membre\n' +
         '› MP de bienvenue envoyé automatiquement\n' +
